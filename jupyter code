@@ -1,0 +1,73 @@
+import pandas as pd
+import os
+
+def read_dbf_to_dataframe(file_path):
+    with open(file_path, 'rb') as f:
+        # Read the header
+        header = f.read(32)
+        num_records = int.from_bytes(header[4:8], 'little')
+        header_length = int.from_bytes(header[8:10], 'little')
+        record_length = int.from_bytes(header[10:12], 'little')
+
+        # Read field descriptors
+        fields = []
+        while True:
+            field_descriptor = f.read(32)
+            if field_descriptor[0] == 0x0D:  # Field descriptor terminator
+                break
+            field_name = field_descriptor[:11].decode('ascii').rstrip('\x00')
+            field_type = chr(field_descriptor[11])
+            field_length = field_descriptor[16]
+            fields.append((field_name, field_type, field_length))
+
+        # Read records
+        records = []
+        f.seek(header_length)  # Skip to records section
+        for _ in range(num_records):
+            record = f.read(record_length)
+            if record[0] == 0x20:  # Check for active record
+                record_data = {}
+                offset = 1
+                for field_name, field_type, field_length in fields:
+                    raw_value = record[offset:offset+field_length]
+                    if field_type == 'C':  # Character field
+                        value = raw_value.decode('ascii').strip()
+                    elif field_type == 'N':  # Numeric field
+                        value = raw_value.decode('ascii').strip()
+                        value = float(value) if '.' in value else int(value) if value else None
+                    else:
+                        value = raw_value  # Unhandled type
+                    record_data[field_name] = value
+                    offset += field_length
+                records.append(record_data)
+
+        # Convert records to a DataFrame
+        df = pd.DataFrame(records)
+        return df
+
+# Usage example
+
+
+# Directory containing DBF files
+input_dir = "TrialData/ACTUAL DATA/PORT_DA"
+ListOfFiles=[]
+
+# Process each DBF file in the directory
+for file in os.listdir(input_dir):
+    if file.endswith(".dbf"):
+        dbf_file = os.path.join(input_dir, file)
+        df = read_dbf_to_dataframe(dbf_file)
+        ListOfFiles.append(df)
+
+
+PortDA=pd.concat(ListOfFiles, ignore_index=True)
+        
+
+# Display the DataFrame
+display(PortDA)
+
+
+NewColNames=['DATE','TIME','LO TEMP','F/W TEMP','EXT TEMP A','EXT TEMP B','LO PRES','FOP','S/W PRES','RPM','DG LOAD','UNKNOWN']
+PortDA.columns=NewColNames
+display(PortDA)  
+#print(PortDA.describe())
